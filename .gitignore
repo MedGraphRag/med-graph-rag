@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+
+# Environment variables (секреты)
+.env
+
+# Raw heavy datasets
+data/raw/guidelines/*
+!data/raw/guidelines/.gitkeep
+data/raw/grls/*
+!data/raw/grls/.gitkeep
+*.parquet
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
