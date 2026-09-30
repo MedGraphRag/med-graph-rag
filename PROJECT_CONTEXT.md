@@ -130,9 +130,6 @@ med-graph-rag/
 ## 5. Что уже готово и протестировано
 
 * [x] **Паспорт и архитектура:** утвержден Vision, предметная область, стек и отказ от нерелевантных гипотез.
-* [x] **Базовый экстрактор триплетов:** написан прототип извлечения фактов через `Instructor` + `Pydantic` в `src/ingestion/extractor.py`.
-* [x] **Базовый Entity Resolution:** написан и протестирован модуль сопоставления терминов на эмбеддингах `sentence-transformers` в `src/graph/resolution.py`.
-* [x] **Схема дебатов Multi-Agent Debate (MAD):** формализован граф состояний LangGraph (`SafetyAgent` $\leftrightarrow$ `EfficacyAgent` $\to$ `ClinicalArbiter`) с ограничением до 3 раундов.
 * [x] **Декомпозиция Спринта 1:** оформлен список из 6 задач для GitHub Issues.
 
 ---
