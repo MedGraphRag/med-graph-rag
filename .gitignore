@@ -10,10 +10,15 @@ venv/
 .env
 
 # Raw heavy datasets
+data/raw/*
+!data/raw/.gitkeep
+
 data/raw/guidelines/*
 !data/raw/guidelines/.gitkeep
+
 data/raw/grls/*
 !data/raw/grls/.gitkeep
+
 *.parquet
 
 # IDE
