@@ -225,15 +225,17 @@ def detect_level(
 
     code = code.strip()
 
+    ROMAN_CLASSES = {
+    "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
+    "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI", "XXII"
+}   
+
     # ICD-10 class:
     #
     # Example:
     #   I
     #
-    if (
-        len(code) == 1
-        and code.isalpha()
-    ):
+    if code in ROMAN_CLASSES:
         return ICD10Level.CLASS
 
     # ICD-10 block:

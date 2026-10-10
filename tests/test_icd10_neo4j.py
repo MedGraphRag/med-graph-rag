@@ -250,7 +250,7 @@ def test_transitive_search_reaches_class(neo4j_driver):
     query = """
     MATCH path = (
         child:ICD10 {code: "I11.0"}
-    )-[:PARENT_OF*1..]->(
+    )<-[:PARENT_OF*1..]-(
         parent:ICD10
     )
 
@@ -329,6 +329,7 @@ def test_parent_code_matches_relationship(neo4j_driver):
 
     OPTIONAL MATCH (parent:ICD10)-[:PARENT_OF]->(child)
 
+    WITH child, parent
     WHERE parent IS NULL
        OR parent.code <> child.parent_code
 
@@ -378,7 +379,7 @@ def test_icd10_levels_are_valid(neo4j_driver):
 
     query = """
     MATCH (n:ICD10)
-    WHERE n.level NOT IN [
+    WHERE NOT n.level IN [
         "class",
         "block",
         "category",
@@ -504,7 +505,7 @@ def test_i11_0_complete_hierarchy(neo4j_driver):
 
     query = """
     MATCH path = (
-        root:ICD10 {code: "I"}
+        root:ICD10 {code: "IX"}
     )-[:PARENT_OF*1..]->(
         leaf:ICD10 {code: "I11.0"}
     )

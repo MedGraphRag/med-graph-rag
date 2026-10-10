@@ -5659,7 +5659,7 @@
       "code": "II",
       "name": "НОВООБРАЗОВАНИЯ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "C00-C97",
@@ -11029,7 +11029,7 @@
       "code": "III",
       "name": "БОЛЕЗНИ КРОВИ, КРОВЕТВОРНЫХ ОРГАНОВ И ОТДЕЛЬНЫЕ НАРУШЕНИЯ, ВОВЛЕКАЮЩИЕ ИММУННЫЙ МЕХАНИЗМ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "D50-D53",
@@ -12223,7 +12223,7 @@
       "code": "IV",
       "name": "БОЛЕЗНИ ЭНДОКРИННОЙ СИСТЕМЫ, РАССТРОЙСТВА ПИТАНИЯ И НАРУШЕНИЯ ОБМЕНА ВЕЩЕСТВ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "E00-E07",
@@ -17623,7 +17623,7 @@
       "code": "VI",
       "name": "БОЛЕЗНИ НЕРВНОЙ СИСТЕМЫ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "G00-G09",
@@ -20059,7 +20059,7 @@
       "code": "VII",
       "name": "БОЛЕЗНИ ГЛАЗА И ЕГО ПРИДАТОЧНОГО АППАРАТА",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "H00-H06",
@@ -21973,7 +21973,7 @@
       "code": "VIII",
       "name": "БОЛЕЗНИ УХА И СОСЦЕВИДНОГО ОТРОСТКА",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "H60-H62",
@@ -22813,7 +22813,7 @@
       "code": "IX",
       "name": "БОЛЕЗНИ СИСТЕМЫ КРОВООБРАЩЕНИЯ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "I00-I02",
@@ -27343,7 +27343,7 @@
       "code": "XI",
       "name": "БОЛЕЗНИ ОРГАНОВ ПИЩЕВАРЕНИЯ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "K00-K14",
@@ -30451,7 +30451,7 @@
       "code": "XII",
       "name": "БОЛЕЗНИ КОЖИ И ПОДКОЖНОЙ КЛЕТЧАТКИ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "L00-L08",
@@ -32905,7 +32905,7 @@
       "code": "XIII",
       "name": "БОЛЕЗНИ КОСТНО-МЫШЕЧНОЙ СИСТЕМЫ И СОЕДИНИТЕЛЬНОЙ ТКАНИ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "M00-M25",
@@ -36763,7 +36763,7 @@
       "code": "XIV",
       "name": "БОЛЕЗНИ МОЧЕПОЛОВОЙ СИСТЕМЫ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "N00-N08",
@@ -39865,7 +39865,7 @@
       "code": "XV",
       "name": "БЕРЕМЕННОСТЬ, РОДЫ И ПОСЛЕРОДОВОЙ ПЕРИОД",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "O00-O08",
@@ -42925,7 +42925,7 @@
       "code": "XVI",
       "name": "ОТДЕЛЬНЫЕ СОСТОЯНИЯ, ВОЗНИКАЮЩИЕ В ПЕРИНАТАЛЬНОМ ПЕРИОДЕ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "P00-P04",
@@ -45325,7 +45325,7 @@
       "code": "XVII",
       "name": "ВРОЖДЕННЫЕ АНОМАЛИИ [ПОРОКИ РАЗВИТИЯ], ДЕФОРМАЦИИ И ХРОМОСОМНЫЕ НАРУШЕНИЯ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "Q00-Q07",
@@ -49627,7 +49627,7 @@
       "code": "XVIII",
       "name": "СИМПТОМЫ, ПРИЗНАКИ И ОТКЛОНЕНИЯ ОТ НОРМЫ, ВЫЯВЛЕННЫЕ ПРИ КЛИНИЧЕСКИХ И ЛАБОРАТОРНЫХ ИССЛЕДОВАНИЯХ, НЕ КЛАССИФИЦИРОВАННЫЕ В ДРУГИХ РУБРИКАХ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "R00-R09",
@@ -52117,7 +52117,7 @@
       "code": "XIX",
       "name": "ТРАВМЫ, ОТРАВЛЕНИЯ И НЕКОТОРЫЕ ДРУГИЕ ПОСЛЕДСТВИЯ ВОЗДЕЙСТВИЯ ВНЕШНИХ ПРИЧИН",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "S00-S09",
@@ -62719,7 +62719,7 @@
       "code": "XX",
       "name": "ВНЕШНИЕ ПРИЧИНЫ ЗАБОЛЕВАЕМОСТИ И СМЕРТНОСТИ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "V01-X59",
@@ -85015,7 +85015,7 @@
       "code": "XXI",
       "name": "ФАКТОРЫ, ВЛИЯЮЩИЕ НА СОСТОЯНИЕ ЗДОРОВЬЯ НАСЕЛЕНИЯ И ОБРАЩЕНИЯ В УЧРЕЖДЕНИЯ ЗДРАВООХРАНЕНИЯ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "Z00-Z13",
@@ -89341,7 +89341,7 @@
       "code": "XXII",
       "name": "КОДЫ ДЛЯ СПЕЦИАЛЬНЫХ ЦЕЛЕЙ",
       "parent_code": null,
-      "level": "category"
+      "level": "class"
     },
     {
       "code": "U00-U49",
