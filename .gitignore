@@ -25,3 +25,7 @@ data/raw/grls/*
 .idea/
 .vscode/
 .DS_Store
+
+# Local generated GRLS reports and backups
+data/processed/backups/
+data/processed/*_report.json
