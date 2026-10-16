@@ -10,13 +10,22 @@ venv/
 .env
 
 # Raw heavy datasets
+data/raw/*
+!data/raw/.gitkeep
+
 data/raw/guidelines/*
 !data/raw/guidelines/.gitkeep
+
 data/raw/grls/*
 !data/raw/grls/.gitkeep
+
 *.parquet
 
 # IDE
 .idea/
 .vscode/
 .DS_Store
+
+# Local generated GRLS reports and backups
+data/processed/backups/
+data/processed/*_report.json
