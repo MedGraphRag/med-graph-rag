@@ -1,11 +1,11 @@
 
 from pathlib import Path
 
-from src.nlp.grls_resolver import DrugResolver
+from grls_resolver import DrugResolver
 
 
 def main():
-    parquet_path = Path("data/processed/grls_normalized.parquet")
+    parquet_path = parquet_path = Path(__file__).resolve().parents[2] / "data" / "processed" / "grls_normalized.parquet"
 
     if not parquet_path.exists():
         print(f"Файл реестра не найден: {parquet_path}")
@@ -52,3 +52,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+#pytest -q --ignore=tests/test_icd10_neo4j.py
