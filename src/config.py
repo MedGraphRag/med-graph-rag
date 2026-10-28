@@ -1,5 +1,4 @@
 from pathlib import Path
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,6 +10,13 @@ PROCESSED_DATA_DIR = BASE_DIR / "data" / "processed"
 
 DATA_DIR = PROCESSED_DATA_DIR
 OUTPUT_FILE = DATA_DIR / "cr_manifest.json"
+
+# Юридический дисклеймер согласно ст. 323-ФЗ РФ
+LEGAL_DISCLAIMER = (
+    "Внимание! Данная система носит исключительно справочно-поисковый характер "
+    "и не является медицинским изделием или системой поддержки принятия врачебных решений (СППВР). "
+    "Все назначения должны проверяться квалифицированным специалистом."
+)
 
 # Настройки API
 API_URL = 'https://apicr.minzdrav.gov.ru/api.ashx'
@@ -51,6 +57,7 @@ PAYLOAD = {
     'columns': [],
 }
 
+
 class Settings(BaseSettings):
     """
     Единый класс настроек и переменных окружения проекта MedGraphRAG.
@@ -67,6 +74,7 @@ class Settings(BaseSettings):
         description="Имя пользователя Neo4j",
     )
     neo4j_password: str = Field(
+        default="password",
         description="Пароль пользователя Neo4j",
     )
 
