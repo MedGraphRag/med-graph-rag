@@ -2,7 +2,11 @@
 import pymupdf
 import pytest
 
-from src.nlp.cr_extractor import extract_pages
+from src.nlp.cr_extractor import (
+    extract_pages,
+    extract_section_headings,
+    is_valid_section_heading,
+)
 
 
 def create_pdf(path, page_texts):
@@ -59,3 +63,68 @@ def test_extract_pages_rejects_empty_pdf(tmp_path):
     with pytest.raises(RuntimeError, match="Failed to extract text"):
         extract_pages(pdf_path)
 
+
+
+def test_extract_section_headings_keeps_valid_headings():
+    headings = [
+        "1. Краткая информация",
+        "1.1 Определение заболевания",
+        "2.5 Иные диагностические исследования",
+        "3.3 Хирургическое лечение",
+        "7. Дополнительная информация",
+    ]
+
+    formatted_text = {
+        "blocks": [
+            {
+                "lines": [
+                    {
+                        "spans": [
+                            {
+                                "text": heading,
+                                "flags": 16,
+                                "size": 12,
+                            }
+                        ]
+                    }
+                ]
+            }
+            for heading in headings
+        ]
+    }
+
+    assert extract_section_headings(formatted_text) == headings
+
+
+
+
+def test_extract_section_headings_rejects_bibliography():
+    text = (
+        "496. Tiwari S, Løchen ML, Jacobsen BK, et al. "
+        "CHA2DS2-VASc score. Open Heart. 2016;3(2);e000439. "
+        "doi:10.1136/openhrt-2016-000439"
+    )
+
+    formatted_text = {
+        "blocks": [
+            {
+                "lines": [
+                    {
+                        "spans": [
+                            {
+                                "text": text,
+                                "flags": 16,
+                                "size": 12,
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+
+    assert extract_section_headings(formatted_text) == []
+
+
+def test_is_valid_section_heading_rejects_long_text():
+    assert not is_valid_section_heading("1. " + "слово " * 40)

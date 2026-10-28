@@ -87,7 +87,7 @@ def run_pipeline(
             current_section = None
 
             for page in pages:
-                headings = extract_section_headings(page["text"])
+                headings = extract_section_headings(page["formatted_text"])
 
                 if headings:
                     current_section = headings[-1]
