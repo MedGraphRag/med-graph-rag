@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import pymupdf
@@ -238,3 +237,328 @@ def extract_section_headings(formatted_text: dict) -> list[str]:
             headings.append(heading)
 
     return headings
+
+
+
+# --------------------------------------------------------------------------
+# Извлечение таблиц
+# --------------------------------------------------------------------------
+
+# Максимальное расстояние от подписи до таблицы (в пунктах PDF).
+CAPTION_MAX_GAP = 120
+
+# Минимальное количество векторных объектов для запуска find_tables()
+# на странице без подписи и возможного продолжения таблицы.
+MIN_DRAWINGS_FOR_TABLE = 4
+
+CAPTION_PATTERN = re.compile(
+    r"^\s*таблица\s*(\d+)\b",
+    re.IGNORECASE,
+)
+
+CAPTION_QUICK_PATTERN = re.compile(
+    r"^\s*таблица\s*\d+",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _normalize_cell(text: str | None) -> str | None:
+    """Нормализует содержимое ячейки, сохраняя переносы строк."""
+    if not isinstance(text, str):
+        return None
+
+    lines = [
+        re.sub(r"[ \t\u00a0]+", " ", line).strip()
+        for line in text.splitlines()
+    ]
+    text = "\n".join(line for line in lines if line)
+
+    text = re.sub(r" +([,.;:)])", r"\1", text)
+    text = re.sub(r"\( +", "(", text)
+
+    return text or None
+
+
+def _find_captions(
+    page: "pymupdf.Page",
+) -> list[tuple[int, "pymupdf.Rect"]]:
+    """Находит подписи вида «Таблица N» и возвращает их координаты."""
+    captions: dict[int, pymupdf.Rect] = {}
+
+    for block in page.get_text("dict").get("blocks", []):
+        for line in block.get("lines", []):
+            line_text = "".join(
+                span["text"] for span in line.get("spans", [])
+            )
+            match = CAPTION_PATTERN.match(line_text)
+
+            if match:
+                number = int(match.group(1))
+                captions.setdefault(number, pymupdf.Rect(line["bbox"]))
+
+    return sorted(captions.items(), key=lambda item: item[1].y0)
+
+
+def _may_contain_table(
+    page: "pymupdf.Page",
+    has_caption: bool,
+    carry: bool,
+) -> bool:
+    """Решает, нужно ли запускать затратный поиск таблиц на странице."""
+    if has_caption or carry:
+        return True
+
+    return len(page.get_cdrawings()) >= MIN_DRAWINGS_FOR_TABLE
+
+
+def _cell_text_from_words(
+    words: list,
+    bbox: tuple | None,
+    fallback: str | None,
+) -> str | None:
+    """Восстанавливает текст ячейки по словам страницы.
+
+    Слова группируются по строкам сверху вниз, внутри строки —
+    слева направо. Если координаты ячейки недоступны или в ней
+    не найдены слова, используется результат table.extract().
+    """
+    if bbox is None:
+        return fallback
+
+    x0, y0, x1, y1 = bbox
+
+    cell_words = [
+        word
+        for word in words
+        if x0 <= (word[0] + word[2]) / 2 <= x1
+        and y0 <= (word[1] + word[3]) / 2 <= y1
+    ]
+
+    if not cell_words:
+        return fallback
+
+    cell_words.sort(
+        key=lambda word: ((word[1] + word[3]) / 2, word[0])
+    )
+
+    lines = [[cell_words[0]]]
+
+    for word in cell_words[1:]:
+        reference = lines[-1][0]
+        tolerance = (reference[3] - reference[1]) * 0.5
+        center_diff = abs(
+            (word[1] + word[3]) / 2
+            - (reference[1] + reference[3]) / 2
+        )
+
+        if center_diff <= tolerance:
+            lines[-1].append(word)
+        else:
+            lines.append([word])
+
+    return "\n".join(
+        " ".join(
+            word[4] for word in sorted(line, key=lambda item: item[0])
+        )
+        for line in lines
+    )
+
+
+def extract_tables(
+    pdf_path: str | Path,
+) -> list[dict[str, int | list | str | None]]:
+    """Извлекает таблицы из PDF и нормализует содержимое ячеек.
+
+    Статусы:
+    - extracted: таблица обнаружена и содержимое извлечено;
+    - unprocessed: обнаружена подпись или таблица, но извлечение
+      не удалось, либо find_tables() завершился ошибкой.
+
+    На страницах без подписи поиск выполняется, если предыдущая таблица
+    дошла до нижней части страницы или на текущей странице достаточно
+    векторных объектов. Это ускоряет обработку, но является эвристикой:
+    таблица без границ и без подписи может быть пропущена.
+    """
+    path = Path(pdf_path)
+
+    if not path.is_file():
+        raise FileNotFoundError(f"PDF file not found: {path}")
+
+    if path.suffix.lower() != ".pdf":
+        raise ValueError(f"Expected a PDF file, got: {path}")
+
+    results = []
+
+    try:
+        with pymupdf.open(path) as document:
+            if document.is_encrypted:
+                raise ValueError(
+                    f"Encrypted PDF is not supported: {path}"
+                )
+
+            carry = False
+
+            for page_number, page in enumerate(document, start=1):
+                text = page.get_text("text")
+                has_caption = bool(CAPTION_QUICK_PATTERN.search(text))
+                captions = _find_captions(page) if has_caption else []
+
+                if not _may_contain_table(
+                    page,
+                    has_caption or bool(captions),
+                    carry,
+                ):
+                    carry = False
+                    continue
+
+                try:
+                    tables = page.find_tables().tables
+                except Exception as error:
+                    # Не теряем ошибку даже на странице без подписи:
+                    # она могла проверяться из-за carry или drawings.
+                    results.append({
+                        "page": page_number,
+                        "table_index": None,
+                        "rows": None,
+                        "status": "unprocessed",
+                        "message": f"find_tables failed: {error}",
+                    })
+                    carry = False
+                    continue
+
+                # Извлекаем слова один раз на страницу, а не для каждой ячейки.
+                words = page.get_text("words") if tables else []
+
+                # Сопоставляем подписи и таблицы по расстоянию между ними.
+                captioned: set[int] = set()
+                unmatched_captions: list[int] = []
+
+                for number, caption_rect in captions:
+                    candidates = [
+                        (
+                            tables[index].bbox[1] - caption_rect.y1,
+                            index,
+                        )
+                        for index in range(len(tables))
+                        if index not in captioned
+                        and -5
+                        <= tables[index].bbox[1] - caption_rect.y1
+                        <= CAPTION_MAX_GAP
+                    ]
+
+                    if candidates:
+                        captioned.add(min(candidates)[1])
+                    else:
+                        unmatched_captions.append(number)
+
+                table_reaches_bottom = False
+
+                for index, table in enumerate(tables):
+                    table_index = index + 1
+                    has_table_caption = index in captioned
+
+                    try:
+                        # Если найденная область доходит до нижнего края,
+                        # проверим следующую страницу на продолжение.
+                        if table.bbox[3] > page.rect.height * 0.85:
+                            table_reaches_bottom = True
+
+                        extracted_rows = table.extract()
+                        table_rows = getattr(table, "rows", None)
+
+                        use_bboxes = (
+                            table_rows is not None
+                            and len(table_rows) == len(extracted_rows)
+                        )
+
+                        rows = []
+
+                        for row_index, row in enumerate(extracted_rows):
+                            bboxes = (
+                                table_rows[row_index].cells
+                                if use_bboxes
+                                else [None] * len(row)
+                            )
+
+                            if len(bboxes) != len(row):
+                                bboxes = [None] * len(row)
+
+                            normalized_row = [
+                                _normalize_cell(
+                                    _cell_text_from_words(
+                                        words,
+                                        bbox,
+                                        cell,
+                                    )
+                                )
+                                for bbox, cell in zip(bboxes, row)
+                            ]
+                            rows.append(normalized_row)
+
+                        has_content = any(
+                            any(cell for cell in row)
+                            for row in rows
+                        )
+
+                        # Без подписи отбрасываем объекты, которые
+                        # недостаточно похожи на настоящие таблицы.
+                        if not has_table_caption and (
+                            not has_content
+                            or len(rows) < 2
+                            or max(len(row) for row in rows) < 2
+                        ):
+                            continue
+
+                        if not has_content:
+                            message = "Empty table"
+                        elif has_table_caption:
+                            message = None
+                        else:
+                            message = (
+                                "No caption "
+                                "(possibly a continuation of a table)"
+                            )
+
+                        results.append({
+                            "page": page_number,
+                            "table_index": table_index,
+                            "rows": rows if has_content else None,
+                            "status": (
+                                "extracted"
+                                if has_content
+                                else "unprocessed"
+                            ),
+                            "message": message,
+                        })
+
+                    except Exception as error:
+                        results.append({
+                            "page": page_number,
+                            "table_index": table_index,
+                            "rows": None,
+                            "status": "unprocessed",
+                            "message": str(error),
+                        })
+
+                for number in unmatched_captions:
+                    results.append({
+                        "page": page_number,
+                        "table_index": None,
+                        "rows": None,
+                        "status": "unprocessed",
+                        "message": (
+                            f"Caption «Таблица {number}» found, "
+                            "but no table detected"
+                        ),
+                    })
+
+                carry = table_reaches_bottom
+
+            return results
+
+    except ValueError:
+        raise
+    except Exception as error:
+        raise RuntimeError(
+            f"Failed to extract tables from {path}"
+        ) from error
