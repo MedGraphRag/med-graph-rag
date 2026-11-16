@@ -189,3 +189,18 @@ def test_ambiguous_search_returns_all_variants(tmp_path):
         "берлиприл 5",
     }
     assert result.ambiguous is True
+
+
+def test_search_order_is_reproducible_with_different_registry_row_order(tmp_path):
+    resolver = make_resolver(tmp_path)
+    forward = resolver.search("эналаприл")
+
+    resolver.df = resolver.df.reverse()
+    backward = resolver.search("эналаприл")
+
+    assert forward.model_dump_json() == backward.model_dump_json()
+    variants = [
+        (match.trade_name, match.inn or "", tuple(match.atx_codes))
+        for match in forward.matches
+    ]
+    assert variants == sorted(variants)
