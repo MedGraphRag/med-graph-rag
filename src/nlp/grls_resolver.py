@@ -119,6 +119,11 @@ class DrugResolver:
             for row in matches.iter_rows(named=True)
         ]
 
+        # При одинаковых названии и МНН используем АТХ для стабильного порядка.
+        drugs.sort(
+            key=lambda drug: (drug.trade_name, drug.inn or "", tuple(drug.atx_codes))
+        )
+
         # Multiple registry entries for the same trade name and INN can
         # carry different ATX codes. Keep those codes, but do not count
         # them as separate drug-name variants when determining ambiguity.
