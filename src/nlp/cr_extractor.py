@@ -1,13 +1,22 @@
+import re
 from pathlib import Path
+from typing import TypedDict
 
 import pymupdf
-import re
 
 
-def extract_pages(
-    pdf_path: str | Path,
-) -> list[dict[str, int | str | bool | dict]]:
-    """Extract text from a PDF, preserving page numbers and table presence.
+class PageContent(TypedDict):
+    page: int
+    text: str
+    formatted_text: dict
+
+
+class EmptyPDFError(RuntimeError):
+    """The input file has no bytes to read."""
+
+
+def extract_pages(pdf_path: str | Path) -> list[PageContent]:
+    """Extract plain and formatted text from a PDF, preserving page numbers.
 
     Args:
         pdf_path: Path to a clinical guideline PDF.
@@ -17,7 +26,6 @@ def extract_pages(
         - page: 1-based page number;
         - text: extracted page text;
         - formatted_text: formatted page content;
-        - has_tables: whether tables were detected on the page.
 
         Pages with no extractable text are preserved as empty strings.
 
@@ -26,6 +34,14 @@ def extract_pages(
         ValueError: If the path is not a PDF or the document is empty.
         RuntimeError: If the PDF cannot be opened or read.
     """
+    pages, _ = read_pdf_pages(pdf_path)
+    if not pages:
+        raise ValueError(f"PDF contains no pages: {pdf_path}")
+    return pages
+
+
+def read_pdf_pages(pdf_path: str | Path) -> tuple[list[PageContent], bool]:
+    """Return page content and whether PyMuPDF repaired the input in memory."""
     path = Path(pdf_path)
 
     if not path.is_file():
@@ -39,14 +55,12 @@ def extract_pages(
             if document.is_encrypted:
                 raise ValueError(f"Encrypted PDF is not supported: {path}")
 
-            if len(document) == 0:
-                raise ValueError(f"PDF contains no pages: {path}")
-
             pages = []
 
             for page_number, page in enumerate(document, start=1):
-                text = page.get_text("text")
-                formatted_text = page.get_text("dict")
+                text_page = page.get_textpage(flags=pymupdf.TEXTFLAGS_DICT)
+                text = page.get_text("text", textpage=text_page)
+                formatted_text = page.get_text("dict", textpage=text_page)
 
                 pages.append(
                     {
@@ -56,8 +70,10 @@ def extract_pages(
                     }
                 )
 
-            return pages
+            return pages, document.is_repaired
 
+    except pymupdf.EmptyFileError as error:
+        raise EmptyPDFError(f"Failed to extract text from {path}: empty file") from error
     except ValueError:
         raise
     except Exception as error:
@@ -251,13 +267,17 @@ CAPTION_MAX_GAP = 120
 # на странице без подписи и возможного продолжения таблицы.
 MIN_DRAWINGS_FOR_TABLE = 4
 
+CAPTION_LABEL = r"(?:продолжение\s+таблицы|таблица)"
+CAPTION_LABEL_PATTERN = re.compile(CAPTION_LABEL, re.IGNORECASE)
 CAPTION_PATTERN = re.compile(
-    r"^\s*таблица\s*(\d+)\b",
+    rf"^{CAPTION_LABEL}\s*(?:№\s*)?"
+    r"(?:[А-ЯЁA-Z]{1,4}\s*[-–]?\s*)?\d+"
+    r"(?:[./\-–](?:[А-ЯЁA-Z]{1,4}\s*)?\d+)*"
+    r"(?=$|[\s.,:–—])",
     re.IGNORECASE,
 )
-
 CAPTION_QUICK_PATTERN = re.compile(
-    r"^\s*таблица\s*\d+",
+    rf"^[^\S\n]*{CAPTION_LABEL}\b",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -280,23 +300,44 @@ def _normalize_cell(text: str | None) -> str | None:
 
 
 def _find_captions(
-    page: "pymupdf.Page",
-) -> list[tuple[int, "pymupdf.Rect"]]:
-    """Находит подписи вида «Таблица N» и возвращает их координаты."""
-    captions: dict[int, pymupdf.Rect] = {}
+    formatted_text: dict,
+) -> list[tuple[str, "pymupdf.Rect"]]:
+    """Возвращает подписи таблиц и их координаты."""
+    lines = [
+        ("".join(span["text"] for span in line.get("spans", [])).strip(),
+         pymupdf.Rect(line["bbox"]))
+        for block in formatted_text.get("blocks", [])
+        for line in block.get("lines", [])
+    ]
+    captions = []
+    for index, (text, rect) in enumerate(lines):
+        match = CAPTION_PATTERN.match(text)
+        if not match and CAPTION_LABEL_PATTERN.fullmatch(text):
+            if index + 1 < len(lines):
+                next_text, next_rect = lines[index + 1]
+                if rect.y0 - 4 <= next_rect.y0 <= rect.y1 + 20:
+                    match = CAPTION_PATTERN.match(f"{text} {next_text}")
+                    if match:
+                        rect |= next_rect
+            if not match:
+                captions.append((text, rect))
+        if match:
+            captions.append((" ".join(match.group().split()), rect))
 
-    for block in page.get_text("dict").get("blocks", []):
-        for line in block.get("lines", []):
-            line_text = "".join(
-                span["text"] for span in line.get("spans", [])
-            )
-            match = CAPTION_PATTERN.match(line_text)
+    return sorted(captions, key=lambda item: (item[1].y0, item[1].x0))
 
-            if match:
-                number = int(match.group(1))
-                captions.setdefault(number, pymupdf.Rect(line["bbox"]))
 
-    return sorted(captions.items(), key=lambda item: item[1].y0)
+def _overlapping_table_indices(tables: list) -> set[int]:
+    """Отмечает конкурирующие сетки в одной области страницы."""
+    rectangles = [pymupdf.Rect(table.bbox) for table in tables]
+    overlapping = set()
+    for index, first in enumerate(rectangles):
+        for other_index in range(index + 1, len(rectangles)):
+            second = rectangles[other_index]
+            common_area = (first & second).get_area()
+            if common_area and common_area >= min(first.get_area(), second.get_area()) / 2:
+                overlapping.update((index, other_index))
+    return overlapping
 
 
 def _may_contain_table(
@@ -308,7 +349,10 @@ def _may_contain_table(
     if has_caption or carry:
         return True
 
-    return len(page.get_cdrawings()) >= MIN_DRAWINGS_FOR_TABLE
+    drawings = page.get_cdrawings()
+    return len(drawings) >= MIN_DRAWINGS_FOR_TABLE or any(
+        len(drawing["items"]) >= MIN_DRAWINGS_FOR_TABLE for drawing in drawings
+    )
 
 
 def _cell_text_from_words(
@@ -366,8 +410,12 @@ def _cell_text_from_words(
 
 def extract_tables(
     pdf_path: str | Path,
+    *,
+    pages: list[PageContent] | None = None,
 ) -> list[dict[str, int | list | str | None]]:
     """Извлекает таблицы из PDF и нормализует содержимое ячеек.
+
+    В pages можно передать результат extract_pages() для этого же PDF.
 
     Статусы:
     - extracted: таблица обнаружена и содержимое извлечено;
@@ -399,17 +447,25 @@ def extract_tables(
             carry = False
 
             for page_number, page in enumerate(document, start=1):
-                text = page.get_text("text")
+                content = pages[page_number - 1] if pages is not None else None
+                text = (
+                    content["text"]
+                    if content is not None
+                    else page.get_text("text")
+                )
                 has_caption = bool(CAPTION_QUICK_PATTERN.search(text))
-                captions = _find_captions(page) if has_caption else []
-
-                if not _may_contain_table(
-                    page,
-                    has_caption or bool(captions),
-                    carry,
-                ):
+                if not _may_contain_table(page, has_caption, carry):
                     carry = False
                     continue
+
+                captions = []
+                if has_caption:
+                    formatted_text = (
+                        content["formatted_text"]
+                        if content is not None
+                        else page.get_text("dict")
+                    )
+                    captions = _find_captions(formatted_text)
 
                 try:
                     tables = page.find_tables().tables
@@ -419,10 +475,19 @@ def extract_tables(
                     results.append({
                         "page": page_number,
                         "table_index": None,
+                        "caption": None,
                         "rows": None,
                         "status": "unprocessed",
                         "message": f"find_tables failed: {error}",
                     })
+                    results.extend({
+                        "page": page_number,
+                        "table_index": None,
+                        "caption": caption,
+                        "rows": None,
+                        "status": "unprocessed",
+                        "message": "Caption could not be matched because table detection failed",
+                    } for caption, _ in captions)
                     carry = False
                     continue
 
@@ -430,10 +495,10 @@ def extract_tables(
                 words = page.get_text("words") if tables else []
 
                 # Сопоставляем подписи и таблицы по расстоянию между ними.
-                captioned: set[int] = set()
-                unmatched_captions: list[int] = []
+                captioned: dict[int, str] = {}
+                unmatched_captions: list[str] = []
 
-                for number, caption_rect in captions:
+                for caption, caption_rect in captions:
                     candidates = [
                         (
                             tables[index].bbox[1] - caption_rect.y1,
@@ -447,15 +512,16 @@ def extract_tables(
                     ]
 
                     if candidates:
-                        captioned.add(min(candidates)[1])
+                        captioned[min(candidates)[1]] = caption
                     else:
-                        unmatched_captions.append(number)
+                        unmatched_captions.append(caption)
 
+                overlapping = _overlapping_table_indices(tables)
                 table_reaches_bottom = False
 
                 for index, table in enumerate(tables):
                     table_index = index + 1
-                    has_table_caption = index in captioned
+                    caption = captioned.get(index)
 
                     try:
                         # Если найденная область доходит до нижнего края,
@@ -463,7 +529,14 @@ def extract_tables(
                         if table.bbox[3] > page.rect.height * 0.85:
                             table_reaches_bottom = True
 
+                        if index in overlapping:
+                            raise ValueError("Overlapping table grids")
+
                         extracted_rows = table.extract()
+                        if not extracted_rows or not extracted_rows[0] or any(
+                            len(row) != len(extracted_rows[0]) for row in extracted_rows
+                        ):
+                            raise ValueError("Invalid table grid")
                         table_rows = getattr(table, "rows", None)
 
                         use_bboxes = (
@@ -500,18 +573,12 @@ def extract_tables(
                             for row in rows
                         )
 
-                        # Без подписи отбрасываем объекты, которые
-                        # недостаточно похожи на настоящие таблицы.
-                        if not has_table_caption and (
-                            not has_content
-                            or len(rows) < 2
-                            or max(len(row) for row in rows) < 2
-                        ):
-                            continue
+                        if caption is None and (len(rows) < 2 or len(rows[0]) < 2):
+                            raise ValueError("Uncaptioned grid has fewer than two rows or columns")
 
                         if not has_content:
                             message = "Empty table"
-                        elif has_table_caption:
+                        elif caption is not None:
                             message = None
                         else:
                             message = (
@@ -522,6 +589,7 @@ def extract_tables(
                         results.append({
                             "page": page_number,
                             "table_index": table_index,
+                            "caption": caption,
                             "rows": rows if has_content else None,
                             "status": (
                                 "extracted"
@@ -535,21 +603,20 @@ def extract_tables(
                         results.append({
                             "page": page_number,
                             "table_index": table_index,
+                            "caption": caption,
                             "rows": None,
                             "status": "unprocessed",
                             "message": str(error),
                         })
 
-                for number in unmatched_captions:
+                for caption in unmatched_captions:
                     results.append({
                         "page": page_number,
                         "table_index": None,
+                        "caption": caption,
                         "rows": None,
                         "status": "unprocessed",
-                        "message": (
-                            f"Caption «Таблица {number}» found, "
-                            "but no table detected"
-                        ),
+                        "message": f"Caption «{caption}» found, but no table detected",
                     })
 
                 carry = table_reaches_bottom

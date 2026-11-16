@@ -5,6 +5,7 @@ import pytest
 from src.nlp.cr_extractor import (
     extract_pages,
     extract_section_headings,
+    extract_tables,
     is_valid_section_heading,
 )
 
@@ -128,3 +129,50 @@ def test_extract_section_headings_rejects_bibliography():
 
 def test_is_valid_section_heading_rejects_long_text():
     assert not is_valid_section_heading("1. " + "слово " * 40)
+
+
+def test_extract_tables_preserves_merged_cells(tmp_path):
+    path = tmp_path / "table.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_text((72, 72), "Таблица А1", fontname="china-s")
+        page.draw_rect((72, 90, 272, 170))
+        for y in (110, 130, 150):
+            page.draw_line((72, y), (272, y))
+        page.draw_line((172, 110), (172, 170))
+        page.insert_text((80, 104), "Measurements")
+        for y, left, right in (
+            (124, "Sample", "Value"),
+            (144, "A", "0,5 mg"),
+            (164, "B", "1 mg"),
+        ):
+            page.insert_text((80, y), left)
+            page.insert_text((180, y), right)
+        document.save(path)
+
+    (table,) = extract_tables(path, pages=extract_pages(path))
+    assert table["caption"] == "Таблица А1"
+    assert table["status"] == "extracted"
+    header, *rows = table["rows"]
+    assert header[0] == "Measurements"
+    assert header[1:] and all(cell is None for cell in header[1:])
+    assert [(row[0], row[-1]) for row in rows] == [
+        ("Sample", "Value"),
+        ("A", "0,5 mg"),
+        ("B", "1 mg"),
+    ]
+
+
+def test_extract_tables_reports_unmatched_caption(tmp_path):
+    path = tmp_path / "caption_only.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_text((72, 72), "Таблица А1", fontname="china-s")
+        document.save(path)
+
+    (table,) = extract_tables(path)
+    assert table["page"] == 1
+    assert table["caption"] == "Таблица А1"
+    assert table["status"] == "unprocessed"
+    assert table["rows"] is None
+    assert table["message"]
