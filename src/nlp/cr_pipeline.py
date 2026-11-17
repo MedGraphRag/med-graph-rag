@@ -19,8 +19,7 @@ logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = BASE_DIR / "data" / "processed" / "cr_manifest.json"
-PDF_DIR = BASE_DIR / "data" / "raw" / "guidelines"
-
+PDF_DIR = BASE_DIR / "data" / "raw" / "guidelines" / "pdf"
 OUTPUT_PATH = BASE_DIR / "data" / "processed" / "cr_pages.parquet"
 REPORT_PATH = BASE_DIR / "data" / "processed" / "cr_extraction_report.parquet"
 TABLES_OUTPUT_PATH = BASE_DIR / "data" / "processed" / "cr_tables.parquet"
