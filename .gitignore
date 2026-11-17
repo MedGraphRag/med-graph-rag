@@ -29,3 +29,4 @@ data/raw/grls/*
 # Local generated GRLS reports and backups
 data/processed/backups/
 data/processed/*_report.json
+data/processed/clinical_trials/
