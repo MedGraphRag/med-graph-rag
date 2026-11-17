@@ -23,7 +23,7 @@ def test_extract_pages_preserves_text_and_page_numbers(tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     create_pdf(pdf_path, ["First page", "Second page"])
 
-    pages = extract_pages(pdf_path)
+    pages = extract_pages(pdf_path, ocr=False)
 
     assert len(pages) == 2
     assert pages[0]["page"] == 1
@@ -36,12 +36,81 @@ def test_extract_pages_preserves_empty_pages(tmp_path):
     pdf_path = tmp_path / "sample.pdf"
     create_pdf(pdf_path, ["Text", ""])
 
-    pages = extract_pages(pdf_path)
+    pages = extract_pages(pdf_path, ocr=False)
 
     assert len(pages) == 2
     assert pages[0]["text"]
     assert pages[1]["page"] == 2
     assert pages[1]["text"] == ""
+
+
+def test_ocr_only_runs_on_pages_without_text_and_preserves_source(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "mixed.pdf"
+    create_pdf(pdf_path, ["Native text", ""])
+    original = pdf_path.read_bytes()
+    calls = []
+
+    def recognize(page, **kwargs):
+        calls.append((page.number, kwargs))
+        page.insert_text((72, 72), "Recognized scan")
+        return page.get_textpage()
+
+    monkeypatch.setattr(pymupdf.Page, "get_textpage_ocr", recognize)
+    pages = extract_pages(pdf_path, tessdata="/example/tessdata")
+
+    assert [page["text"] for page in pages] == ["Native text", "Recognized scan"]
+    assert [page["text_source"] for page in pages] == ["native", "ocr"]
+    assert [page["ocr_attempted"] for page in pages] == [False, True]
+    assert calls == [(1, {
+        "flags": pymupdf.TEXTFLAGS_DICT, "language": "rus+eng", "dpi": 300,
+        "full": True, "tessdata": "/example/tessdata",
+    })]
+    assert pdf_path.read_bytes() == original
+    assert "Recognized scan" in str(pages[1]["formatted_text"])
+
+
+def test_ocr_failure_preserves_other_pages(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "mixed.pdf"
+    create_pdf(pdf_path, ["Native text", "", "Last page"])
+
+    def fail(page, **kwargs):
+        raise RuntimeError("Missing rus.traineddata")
+
+    monkeypatch.setattr(pymupdf.Page, "get_textpage_ocr", fail)
+    pages = extract_pages(pdf_path)
+
+    assert [page["text"] for page in pages] == ["Native text", "", "Last page"]
+    assert pages[1]["ocr_error"] == "Missing rus.traineddata"
+    assert pages[1]["text_source"] == "empty"
+    assert pages[1]["ocr_attempted"] is True
+    assert pages[2]["ocr_error"] is None
+
+
+def test_ocr_can_be_disabled(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "blank.pdf"
+    create_pdf(pdf_path, [""])
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("OCR must be disabled")
+
+    monkeypatch.setattr(pymupdf.Page, "get_textpage_ocr", unexpected)
+    (page,) = extract_pages(pdf_path, ocr=False)
+    assert page["text"] == ""
+    assert page["ocr_attempted"] is False
+    assert page["ocr_error"] is None
+
+
+def test_ocr_blank_result_is_not_an_error(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "blank.pdf"
+    create_pdf(pdf_path, [""])
+    monkeypatch.setattr(
+        pymupdf.Page, "get_textpage_ocr", lambda page, **kwargs: page.get_textpage(),
+    )
+    (page,) = extract_pages(pdf_path)
+    assert page["text"] == ""
+    assert page["text_source"] == "empty"
+    assert page["ocr_attempted"] is True
+    assert page["ocr_error"] is None
 
 
 def test_extract_pages_raises_for_missing_file(tmp_path):
