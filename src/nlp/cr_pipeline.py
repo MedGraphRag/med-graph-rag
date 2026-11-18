@@ -3,6 +3,7 @@ import json
 import logging
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import nullcontext
+from functools import partial
 from multiprocessing import get_context
 from pathlib import Path
 
@@ -51,6 +52,7 @@ def load_manifest(path: Path) -> list[dict]:
 
 def _extract_document(
     job: tuple[dict, str, Path],
+    *, ocr: bool = True, tessdata: str | None = None,
 ) -> tuple[list[dict], dict, list[dict]]:
     record, code_version, pdf_path = job
     pages_output = []
@@ -63,6 +65,9 @@ def _extract_document(
         "status": "error",
         "page_count": 0,
         "empty_pages": 0,
+        "ocr_pages": 0,
+        "ocr_failed_pages": 0,
+        "ocr_messages": [],
         "pdf_repaired": None,
         "message": None,
         "table_status": "not_attempted",
@@ -70,19 +75,29 @@ def _extract_document(
     }
 
     try:
-        pages, repaired = read_pdf_pages(pdf_path)
+        pages, repaired = read_pdf_pages(pdf_path, ocr=ocr, tessdata=tessdata)
         empty_pages = sum(not page["text"] for page in pages)
+        ocr_messages = [
+            f"Page {page['page']}: {page['ocr_error']}"
+            for page in pages if page["ocr_error"] is not None
+        ]
+        has_text = bool(pages) and empty_pages < len(pages)
+        status = "ok" if has_text else "empty"
+        if ocr_messages:
+            status = "partial" if has_text else "error"
 
         report_row.update(
-            status=(
-                "ok"
-                if pages and empty_pages < len(pages)
-                else "empty"
-            ),
+            status=status,
             page_count=len(pages),
             empty_pages=empty_pages,
+            ocr_pages=sum(page["ocr_attempted"] for page in pages),
+            ocr_failed_pages=len(ocr_messages),
+            ocr_messages=ocr_messages,
             pdf_repaired=repaired,
-            message=None if pages else "PDF contains no pages",
+            message=(
+                f"OCR failed on {len(ocr_messages)} pages; see ocr_messages"
+                if ocr_messages else None if pages else "PDF contains no pages"
+            ),
         )
 
         current_section = None
@@ -109,6 +124,9 @@ def _extract_document(
                     "section_title": current_section,
                     "section_headings": headings,
                     "text": page["text"],
+                    "text_source": page["text_source"],
+                    "ocr_attempted": page["ocr_attempted"],
+                    "ocr_error": page["ocr_error"],
                 }
             )
 
@@ -178,6 +196,8 @@ def run_pipeline(
     table_output_path: Path = TABLES_OUTPUT_PATH,
     *,
     workers: int = 1,
+    ocr: bool = True,
+    tessdata: str | None = None,
 ) -> tuple[int, int]:
     if workers < 1:
         raise ValueError("workers must be at least 1")
@@ -227,16 +247,22 @@ def run_pipeline(
         if workers > 1 and len(jobs) > 1
         else nullcontext()
     )
+    extract_document = partial(_extract_document, ocr=ocr, tessdata=tessdata)
     with pool_context as pool:
         results = (
-            pool.map(_extract_document, jobs)
+            pool.map(extract_document, jobs)
             if pool is not None
-            else map(_extract_document, jobs)
+            else map(extract_document, jobs)
         )
         for pages, report, tables in results:
             pages_output.extend(pages)
             report_output.append(report)
             tables_output.extend(tables)
+            logger.info(
+                "%s: status=%s, pages=%d, OCR attempted=%d, OCR errors=%d",
+                report["code_version"], report["status"], report["page_count"],
+                report["ocr_pages"], report["ocr_failed_pages"],
+            )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -253,6 +279,9 @@ def run_pipeline(
         "section_title": pl.String,
         "section_headings": pl.List(pl.String),
         "text": pl.String,
+        "text_source": pl.String,
+        "ocr_attempted": pl.Boolean,
+        "ocr_error": pl.String,
     }
 
     report_schema = {
@@ -262,6 +291,9 @@ def run_pipeline(
         "status": pl.String,
         "page_count": pl.Int64,
         "empty_pages": pl.Int64,
+        "ocr_pages": pl.Int64,
+        "ocr_failed_pages": pl.Int64,
+        "ocr_messages": pl.List(pl.String),
         "pdf_repaired": pl.Boolean,
         "message": pl.String,
         "table_status": pl.String,
@@ -332,6 +364,13 @@ if __name__ == "__main__":
     )
     parser = argparse.ArgumentParser(description="Extract clinical guidelines")
     parser.add_argument(
+        "--no-ocr", action="store_true",
+        help="disable OCR fallback on pages without native text",
+    )
+    parser.add_argument(
+        "--tessdata", help="Tesseract language data directory (rus and eng)",
+    )
+    parser.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -340,4 +379,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.workers < 1:
         parser.error("--workers must be at least 1")
-    run_pipeline(workers=args.workers)
+    run_pipeline(workers=args.workers, ocr=not args.no_ocr, tessdata=args.tessdata)

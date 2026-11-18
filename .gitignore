@@ -21,6 +21,9 @@ data/raw/grls/*
 
 *.parquet
 
+# Local OCR language models
+data/models/
+
 # IDE
 .idea/
 .vscode/

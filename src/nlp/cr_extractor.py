@@ -9,13 +9,18 @@ class PageContent(TypedDict):
     page: int
     text: str
     formatted_text: dict
+    text_source: str
+    ocr_attempted: bool
+    ocr_error: str | None
 
 
 class EmptyPDFError(RuntimeError):
     """The input file has no bytes to read."""
 
 
-def extract_pages(pdf_path: str | Path) -> list[PageContent]:
+def extract_pages(
+    pdf_path: str | Path, *, ocr: bool = True, tessdata: str | None = None,
+) -> list[PageContent]:
     """Extract plain and formatted text from a PDF, preserving page numbers.
 
     Args:
@@ -27,20 +32,24 @@ def extract_pages(pdf_path: str | Path) -> list[PageContent]:
         - text: extracted page text;
         - formatted_text: formatted page content;
 
-        Pages with no extractable text are preserved as empty strings.
+        Pages without native text are OCRed (rus+eng, 300 DPI) unless
+        ocr=False. Blank pages and OCR failures keep empty strings;
+        OCR failures are recorded in ocr_error.
 
     Raises:
         FileNotFoundError: If the PDF does not exist.
         ValueError: If the path is not a PDF or the document is empty.
         RuntimeError: If the PDF cannot be opened or read.
     """
-    pages, _ = read_pdf_pages(pdf_path)
+    pages, _ = read_pdf_pages(pdf_path, ocr=ocr, tessdata=tessdata)
     if not pages:
         raise ValueError(f"PDF contains no pages: {pdf_path}")
     return pages
 
 
-def read_pdf_pages(pdf_path: str | Path) -> tuple[list[PageContent], bool]:
+def read_pdf_pages(
+    pdf_path: str | Path, *, ocr: bool = True, tessdata: str | None = None,
+) -> tuple[list[PageContent], bool]:
     """Return page content and whether PyMuPDF repaired the input in memory."""
     path = Path(pdf_path)
 
@@ -61,12 +70,35 @@ def read_pdf_pages(pdf_path: str | Path) -> tuple[list[PageContent], bool]:
                 text_page = page.get_textpage(flags=pymupdf.TEXTFLAGS_DICT)
                 text = page.get_text("text", textpage=text_page)
                 formatted_text = page.get_text("dict", textpage=text_page)
+                ocr_attempted = ocr and not text.strip()
+                ocr_error = None
+                text_source = "native" if text.strip() else "empty"
+
+                if ocr_attempted:
+                    try:
+                        text_page = page.get_textpage_ocr(
+                            flags=pymupdf.TEXTFLAGS_DICT,
+                            language="rus+eng",
+                            dpi=300,
+                            full=True,
+                            tessdata=tessdata,
+                        )
+                        text = page.get_text("text", textpage=text_page)
+                        formatted_text = page.get_text("dict", textpage=text_page)
+                        text_source = "ocr" if text.strip() else "empty"
+                    except Exception as error:
+                        # Keep other pages even when the OCR engine / language
+                        # data is unavailable, and expose the failure to callers.
+                        ocr_error = str(error)
 
                 pages.append(
                     {
                         "page": page_number,
                         "text": text.strip(),
                         "formatted_text": formatted_text,
+                        "text_source": text_source,
+                        "ocr_attempted": ocr_attempted,
+                        "ocr_error": ocr_error,
                     }
                 )
 
