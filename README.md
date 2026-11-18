@@ -47,10 +47,12 @@ python -m src.nlp.downloader
 
 ## Клинические утверждения без модели
 
-Автоматическая проверка цитат и условий, сопоставление с ГРЛС, сравнение
-с эталонной выборкой и дополнительная ручная проверка описаны в
-[clinical_offline.md](docs/clinical_offline.md). Эти команды не требуют ключа LLM
-или запущенного Neo4j.
+Извлечение утверждений через Instructor и Pydantic, проверка цитат
+и сопоставление лекарств с ГРЛС описаны в
+[clinical_extraction.md](docs/clinical_extraction.md).
+
+Небольшая выборка для ручной проверки описана в
+[clinical_reference.md](docs/clinical_reference.md).
 
 ## Тесты
 
