@@ -1,4 +1,4 @@
-"""Collect and verify the full public GRLS query for statuses Д/П.
+"""Collect and verify the full public GRLS query for statuses Д/П/ИЗМ.
 
 Date partitions avoid the observed degradation of large API result sets.
 Completeness applies only to this query, never to the entire registry.
@@ -18,10 +18,9 @@ from typing import Sequence
 
 import httpx
 
-from .grls_scraper import API_URL, _get_with_retries, _write_manifest, download_registry, extract_records
+from .grls_scraper import API_URL, DEFAULT_STATUSES, _get_with_retries, _write_manifest, download_registry, extract_records
 
 LOG = logging.getLogger("grls_active")
-ACTIVE_STATUSES = ("Д", "П")
 
 
 def _timestamp() -> str:
@@ -48,7 +47,7 @@ async def download_active_registry(
     collection = output_root / ("collection_active_" + _timestamp())
     (collection / "controls").mkdir(parents=True, exist_ok=False)
     report = {
-        "source": API_URL, "condition_ids_filter": list(ACTIVE_STATUSES),
+        "source": API_URL, "condition_ids_filter": list(DEFAULT_STATUSES),
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "complete": False, "registry_complete": False,
         "termination_reason": "running", "partitions": [], "errors": [],
@@ -57,7 +56,7 @@ async def download_active_registry(
 
     async def control(label: str) -> tuple[int, set[str]]:
         params = [("page", "1"), ("size", "1"),
-                  *(("conditionIds", status) for status in ACTIVE_STATUSES)]
+                  *(("conditionIds", status) for status in DEFAULT_STATUSES)]
         async with httpx.AsyncClient(timeout=httpx.Timeout(45, connect=15),
                                      headers={"Accept": "application/json"}) as client:
             response = await _get_with_retries(client, params)
@@ -83,7 +82,7 @@ async def download_active_registry(
         for start, end in zip(bounds, bounds[1:]):
             await asyncio.sleep(delay_seconds)
             source = await download_registry(
-                output_root=collection / "parts", condition_ids=ACTIVE_STATUSES,
+                output_root=collection / "parts", condition_ids=DEFAULT_STATUSES,
                 delay_seconds=delay_seconds, entry_date_start=start, entry_date_end=end,
             )
             manifest = json.loads((source / "manifest.json").read_text())
@@ -111,7 +110,7 @@ async def download_active_registry(
                 received += len(rows)
                 for row in rows:
                     lp_id = row.get("lpId")
-                    if not lp_id or row.get("conditionId") not in ACTIVE_STATUSES:
+                    if not lp_id or row.get("conditionId") not in DEFAULT_STATUSES:
                         raise RuntimeError(f"Missing identity or unexpected status in {page}")
                     identity = str(lp_id)
                     if identity in seen_ids:
@@ -150,11 +149,11 @@ async def download_active_registry(
                 raise RuntimeError("Raw copy checksum mismatch")
             origin.update(page=page_name, sha256=digest)
         manifest = {
-            "source": API_URL, "condition_ids_filter": list(ACTIVE_STATUSES),
+            "source": API_URL, "condition_ids_filter": list(DEFAULT_STATUSES),
             "started_at_utc": report["started_at_utc"],
             "finished_at_utc": datetime.now(timezone.utc).isoformat(),
             "complete": True, "coverage_verified": True, "query_complete": True,
-            "registry_complete": False, "coverage_scope": "conditionIds=Д,П",
+            "registry_complete": False, "coverage_scope": "conditionIds=" + ",".join(DEFAULT_STATUSES),
             "pagination_complete": True, "page_size_requested": 100,
             "termination_reason": "verified_date_partitions",
             "api_total_count_initial": expected, "api_total_count_final": final_total,
@@ -166,9 +165,9 @@ async def download_active_registry(
             "errors": [],
         }
         _write_manifest(snapshot / "manifest.json", manifest)
-        report.update(complete=True, coverage_scope="conditionIds=Д,П",
+        report.update(complete=True, coverage_scope="conditionIds=" + ",".join(DEFAULT_STATUSES),
                       termination_reason="verified_date_partitions", snapshot=str(snapshot.resolve()))
-        LOG.info("Verified all %s Д/П records in %s", len(seen_ids), snapshot)
+        LOG.info("Verified all %s Д/П/ИЗМ records in %s", len(seen_ids), snapshot)
         return snapshot
     except (KeyboardInterrupt, asyncio.CancelledError):
         report["termination_reason"] = "interrupted"
@@ -183,7 +182,7 @@ async def download_active_registry(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Download and verify all public GRLS records with statuses Д/П")
+    parser = argparse.ArgumentParser(description="Download and verify all public GRLS records with statuses Д/П/ИЗМ")
     parser.add_argument("--output-root", type=Path, default=Path("data/raw/grls"))
     parser.add_argument("--delay", type=float, default=1)
     parser.add_argument("--split-date", action="append", help="Repeatable date boundaries, YYYY-MM-DD; default: 2024-01-01 and 2025-01-01")
@@ -191,7 +190,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     options = {"split_dates": args.split_date} if args.split_date is not None else {}
     snapshot = asyncio.run(download_active_registry(output_root=args.output_root, delay_seconds=args.delay, **options))
-    print(f"Verified Д/П snapshot: {snapshot.resolve()}")
+    print(f"Verified Д/П/ИЗМ snapshot: {snapshot.resolve()}")
 
 
 if __name__ == "__main__":

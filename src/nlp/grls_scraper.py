@@ -22,6 +22,7 @@ API_URL = (
     "medicine/portal/api/v0.1/medicament-registry"
 )
 LOG = logging.getLogger("grls_scraper")
+DEFAULT_STATUSES = ("Д", "П", "ИЗМ")
 _RECORD_KEYS = {"lpId", "commercialName", "dossierId", "ruNumber"}
 _CONTAINER_KEYS = (
     "content", "items", "results", "records", "data", "rows", "medicaments"
@@ -145,7 +146,7 @@ async def download_registry(
     *,
     output_root: Path,
     page_size: int = 100,
-    condition_ids: Sequence[str] = (),
+    condition_ids: Sequence[str] = DEFAULT_STATUSES,
     delay_seconds: float = 0.25,
     max_pages: int = 100_000,
     entry_date_start: str | None = None,
@@ -153,9 +154,8 @@ async def download_registry(
 ) -> Path:
     """Download pages into a timestamped raw snapshot directory.
 
-    By default no conditionIds filter is sent. This is intentional: whether an
-    unfiltered endpoint includes every registry status must be validated from
-    the resulting manifest and compared with the UI's visible total.
+    By default request Д, П and ИЗМ. An explicit condition_ids sequence
+    overrides these statuses; pass an empty sequence for an unfiltered query.
     """
     if delay_seconds < 0:
         raise ValueError("delay_seconds must be nonnegative")
@@ -385,8 +385,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", type=Path, default=Path("data/raw/grls"))
     parser.add_argument("--page-size", type=int, default=100)
     parser.add_argument(
-        "--condition-id", action="append", default=[],
-        help="Optional repeatable status filter; omitted by default to avoid filtering records.",
+        "--condition-id", action="append",
+        help="Repeatable status filter overriding the default: Д, П, ИЗМ.",
     )
     parser.add_argument("--entry-date-start", help="Inclusive registration date, YYYY-MM-DD")
     parser.add_argument("--entry-date-end", help="Upper registration-date boundary, YYYY-MM-DD")
@@ -405,7 +405,7 @@ def main() -> None:
     snapshot = asyncio.run(download_registry(
         output_root=args.output_root,
         page_size=args.page_size,
-        condition_ids=args.condition_id,
+        condition_ids=args.condition_id if args.condition_id is not None else DEFAULT_STATUSES,
         delay_seconds=args.delay,
         max_pages=args.max_pages,
         entry_date_start=args.entry_date_start,

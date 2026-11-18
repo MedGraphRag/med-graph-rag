@@ -40,6 +40,32 @@ def test_pagination_and_filters(tmp_path):
     assert manifest['records_saved_unique'] == 2
 
 
+@pytest.mark.parametrize('flags,statuses', [
+    ([], ['Д', 'П', 'ИЗМ']),
+    (['--condition-id', 'ИЗМ'], ['ИЗМ']),
+    (['--condition-id', 'Д', '--condition-id', 'П'], ['Д', 'П']),
+])
+def test_cli_status_filters_reach_api(tmp_path, flags, statuses):
+    from src.nlp.grls_scraper import main
+
+    def handler(request):
+        assert request.url.params.get_list('conditionIds') == statuses
+        return httpx.Response(200, json=[{
+            'lpId': 'a', 'commercialName': 'Препарат', 'conditionId': statuses[-1],
+        }], headers={'x-total-count': '1'})
+
+    client_type = httpx.AsyncClient
+    def client(**options):
+        return client_type(transport=httpx.MockTransport(handler), **options)
+
+    argv = ['grls_scraper', '--output-root', str(tmp_path), '--delay', '0', *flags]
+    with patch('sys.argv', argv), patch('src.nlp.grls_scraper.httpx.AsyncClient', side_effect=client):
+        main()
+    manifest = json.loads(next(tmp_path.glob('snapshot_*/manifest.json')).read_text())
+    assert manifest['condition_ids_filter'] == statuses
+    assert manifest['query_complete']
+
+
 @pytest.mark.parametrize('pages,reason,count', [
     ([[{'lpId': 'a'}, {'lpId': 'b'}], [{'lpId': 'b'}, {'lpId': 'a'}]], 'repeated_page', 2),
     ([[]], 'empty_page', 0),
@@ -50,7 +76,8 @@ def test_termination(tmp_path, pages, reason, count):
     manifest = json.loads((folder/'manifest.json').read_text())
     assert manifest['termination_reason'] == reason
     assert manifest['records_saved_unique'] == count
-    assert 'conditionIds' not in calls[0].url.params
+    assert calls[0].url.params.get_list('conditionIds') == ['Д', 'П', 'ИЗМ']
+    assert manifest['condition_ids_filter'] == ['Д', 'П', 'ИЗМ']
 
 
 def test_invalid_json_preserved(tmp_path):

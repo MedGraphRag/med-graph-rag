@@ -12,11 +12,11 @@ from src.nlp.grls_active import download_active_registry
 def collect(tmp_path, *, missing_id=False, change_total=False, duplicate_id=False, unexpected_status=False):
     rows = [
         {'lpId':'a','commercialName':'Первый','mnnName':'Вещество','conditionId':'Д','atx':['C01']},
-        {'lpId':'b','commercialName':'Второй','mnnName':'Вещество','conditionId':'Д','atx':[]},
+        {'lpId':'b','commercialName':'Второй','mnnName':'Вещество','conditionId':'ИЗМ','atx':[]},
         {'lpId':'c','commercialName':'Третий','mnnName':'Вещество','conditionId':'П','atx':['C02']},
     ]
     if unexpected_status:
-        rows[1]['conditionId'] = 'ИЗМ'
+        rows[1]['conditionId'] = 'АН'
     if missing_id:
         rows[1]['lpId'] = None
     if duplicate_id:
@@ -28,7 +28,7 @@ def collect(tmp_path, *, missing_id=False, change_total=False, duplicate_id=Fals
         nonlocal controls
         calls.append(request)
         params = request.url.params
-        assert params.get_list('conditionIds') == ['Д','П']
+        assert params.get_list('conditionIds') == ['Д','П','ИЗМ']
         assert params['page'] == '1'  # exact counts prevent out-of-range pagination
         if params['size'] == '1':
             controls += 1
@@ -54,10 +54,11 @@ def test_collects_all_active_and_keeps_records_without_atx(tmp_path):
     assert len(calls) == 5
     assert manifest['complete'] and manifest['coverage_verified']
     assert not manifest['registry_complete']
-    assert manifest['coverage_scope'] == 'conditionIds=Д,П'
+    assert manifest['coverage_scope'] == 'conditionIds=Д,П,ИЗМ'
+    assert manifest['condition_ids_filter'] == ['Д','П','ИЗМ']
     assert manifest['records_saved_unique'] == 3
     assert manifest['records_with_atx'] == 2
-    assert manifest['condition_id_counts'] == {'Д':2, 'П':1}
+    assert manifest['condition_id_counts'] == {'Д':1, 'П':1, 'ИЗМ':1}
     for origin in manifest['page_origins']:
         raw = (snapshot/'pages'/origin['page']).read_bytes()
         original = (tmp_path/origin['source_snapshot']/'pages'/origin['source_page']).read_bytes()

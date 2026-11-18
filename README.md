@@ -14,7 +14,7 @@ pip install -r requirements.txt
 
 ## ГРЛС
 
-Загрузить выборку Д/П с проверкой покрытия и обработать последний snapshot:
+Загрузить выборку Д/П/ИЗМ с проверкой покрытия и обработать последний snapshot:
 
 ```bash
 python -m src.nlp.grls_active --delay 1
@@ -26,7 +26,9 @@ python -m src.nlp.grls_etl --repair-mojibake --mapped-only
 - `data/processed/grls_normalized_records.parquet` — регистрационные записи и происхождение.
 - `data/processed/grls_normalized_report.json` — статистика обработки.
 
-Полнота проверяется для Д/П относительно API. Исходные JSON не изменяются; выгрузки и локальная конфигурация не включаются в Git.
+Оба загрузчика (`grls_active` и `grls_scraper`) по умолчанию запрашивают Д/П/ИЗМ. В `grls_scraper` повторяемый `--condition-id` заменяет этот набор статусов.
+
+Полнота в `grls_active` проверяется для Д/П/ИЗМ относительно API. Исходные JSON не изменяются; выгрузки и локальная конфигурация не включаются в Git.
 
 Проверить и загрузить уникальный normalized-справочник в Neo4j:
 
