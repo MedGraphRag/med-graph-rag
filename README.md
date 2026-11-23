@@ -59,11 +59,28 @@ python -m src.nlp.downloader
 При ошибках процесс возвращает ненулевой код; повторный запуск доскачивает оставшееся.
 Пути и паузу можно задать через `--manifest`, `--output-dir`, `--delay`.
 
-## Клинические утверждения без модели
+## Извлечение клинических утверждений
 
 Извлечение утверждений через Instructor и Pydantic, проверка цитат
 и сопоставление лекарств с ГРЛС описаны в
 [clinical_extraction.md](docs/clinical_extraction.md).
+
+Извлечение по умолчанию работает через Ollama с `gemma4:12b`.
+Загрузка модели: `ollama pull gemma4:12b`; настройки — в `.env.example`.
+Оценка ответов на размеченной выборке: `python -m src.nlp.clinical_evaluation`.
+
+Последовательный батч по подготовленным страницам:
+
+```bash
+python -m src.nlp.clinical_batch --dry-run
+python -m src.nlp.clinical_batch --limit 5 --output-dir data/processed/clinical_batches/first
+python -m src.nlp.clinical_batch --output-dir data/processed/clinical_batches/full
+```
+
+Продолжение запуска: добавьте `--resume` с тем же `--output-dir` и теми же
+параметрами выборки; для повторения ошибочных страниц добавьте `--retry-errors`.
+Результаты страниц и сводка сохраняются по ходу обработки.
+Формат файлов и ограничения описаны в [clinical_extraction.md](docs/clinical_extraction.md).
 
 Небольшая выборка для ручной проверки описана в
 [clinical_reference.md](docs/clinical_reference.md).

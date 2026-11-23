@@ -47,6 +47,41 @@ def test_explicit_page_does_not_require_keywords(pages_path):
     assert fragment.location == "Страница 1"
 
 
+def test_shortest_page_does_not_require_keywords(pages_path):
+    fragment = read_fragment(pages_path, shortest=True)
+
+    assert fragment.document_id == "100_1"
+    assert fragment.page_number == 1
+    assert fragment.text == "Введение."
+
+
+def test_shortest_page_respects_document(pages_path):
+    fragment = read_fragment(pages_path, document="200_1", shortest=True)
+
+    assert fragment.document_id == "200_1"
+    assert fragment.page_number == 2
+
+
+def test_shortest_page_skips_blank_text_and_preserves_source(tmp_path):
+    path = tmp_path / "short_pages.parquet"
+    pl.DataFrame({
+        "code_version": ["a"] * 4,
+        "page_number": [1, 2, 3, 4],
+        "text": [None, "  \n", " Короткий текст. ", "Длинный текст про взаимодействия."],
+    }).write_parquet(path)
+
+    fragment = read_fragment(path, shortest=True)
+
+    assert fragment.page_number == 3
+    assert fragment.text == " Короткий текст. "
+
+
+def test_shortest_and_explicit_page_are_mutually_exclusive():
+    with pytest.raises(SystemExit) as error:
+        main(["--shortest", "--document", "a", "--page", "1"])
+    assert error.value.code == 2
+
+
 def test_rejects_unknown_document(pages_path):
     with pytest.raises(ValueError, match="страница не найдена"):
         read_fragment(pages_path, document="missing")

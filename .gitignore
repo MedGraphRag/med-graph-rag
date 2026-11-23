@@ -30,3 +30,4 @@ data/raw/grls/*
 data/processed/backups/
 data/processed/*_report.json
 data/processed/clinical_trials/
+data/processed/clinical_batches/

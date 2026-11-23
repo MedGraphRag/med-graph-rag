@@ -70,17 +70,17 @@ class Settings(BaseSettings):
         description="Пароль пользователя Neo4j",
     )
 
-    # Настройки LLM (Groq / резерв)
+    # Настройки LLM (Ollama / совместимые API)
     llm_base_url: str = Field(
-        default="https://api.groq.com/openai/v1",
+        default="http://localhost:11434/v1",
         description="Base URL API языковой модели",
     )
     llm_api_key: str = Field(
-        default="mock_key",
+        default="ollama",
         description="API ключ для доступа к LLM",
     )
     llm_model: str = Field(
-        default="llama-3.3-70b-versatile",
+        default="gemma4:12b",
         description="Имя используемой модели",
     )
 
