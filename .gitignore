@@ -19,10 +19,11 @@ data/raw/guidelines/*
 data/raw/grls/*
 !data/raw/grls/.gitkeep
 
+data/processed/clinical_trials/*
 *.parquet
 
-# Local OCR language models
-data/models/
+#models
+data/models/*
 
 # IDE
 .idea/
